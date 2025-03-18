@@ -49,10 +49,6 @@ pressing `return` you should see `Apply complete!`
 ```shell
 terraform apply
 ```
-To delete the stack and wait for it to be deleted:
-```shell
-
-```
 
 ### Invoke the step function
 The ouput of the deployed stack includes the command to run the Step Function from the 
@@ -60,7 +56,7 @@ CLI. The command begins with `aws stepfunctions start-execution`. You can get th
 the AWS console or you can run the command below.
 
 ```shell
-aws cloudformation list-exports --query "Exports[*].[Value]" --output text | grep start-execution
+
 ```
 
 ### Delete the Stack
