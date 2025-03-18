@@ -9,8 +9,10 @@ terraform {
   }
 }
 
-locals {
-  project_name = "timer"
+variable "project_name" {
+  type = string
+  description = "Project name prefix for resources"
+  default = "timer"
 }
 
 # VPC with IGW and two public Subnets
@@ -35,7 +37,7 @@ resource "aws_vpc" "main" {
   cidr_block = var.vpc_cidr
   enable_dns_support = true
   enable_dns_hostnames = true
-  tags = {Name = "${local.project_name}-VPC"}
+  tags = {Name = "${var.project_name}-VPC"}
 }
 
 resource "aws_subnet" "subnets" {
@@ -44,17 +46,17 @@ resource "aws_subnet" "subnets" {
   map_public_ip_on_launch = true
   availability_zone = data.aws_availability_zones.available.names[count.index]
   cidr_block = element(var.subnet_cidrs, count.index)
-  tags = {Name = "${local.project_name}-${count.index}"}
+  tags = {Name = "${var.project_name}-${count.index}"}
 }
 
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
-  tags = {Name = "${local.project_name}-IGW"}
+  tags = {Name = "${var.project_name}-IGW"}
 }
 
 resource "aws_route_table" "main" {
   vpc_id = aws_vpc.main.id
-  tags = {Name = "${local.project_name}-RT"}
+  tags = {Name = "${var.project_name}-RT"}
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.main.id
@@ -76,15 +78,15 @@ variable "bucket" {
 
 resource "aws_default_security_group" "main" {
   vpc_id = aws_vpc.main.id
-  tags = {Name = "${local.project_name}-SG"}
+  tags = {Name = "${var.project_name}-SG"}
 }
 
 resource "aws_ecs_cluster" "main" {
-  name = "${local.project_name}-Cluster"
+  name = "${var.project_name}-Cluster"
 }
 
 resource "aws_iam_role" "task_role" {
-  name = "${local.project_name}-Task-Role"
+  name = "${var.project_name}-Task-Role"
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
@@ -96,7 +98,7 @@ resource "aws_iam_role" "task_role" {
 }
 
 resource "aws_iam_role_policy" "task_policy" {
-  name = "${local.project_name}-Task-Role-Policy"
+  name = "${var.project_name}-Task-Role-Policy"
   role = aws_iam_role.task_role.id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -106,6 +108,42 @@ resource "aws_iam_role_policy" "task_policy" {
         Effect   = "Allow"
         Resource = "arn:aws:s3:::${var.bucket}/*"
       },
+    ]
+  })
+}
+
+resource "aws_iam_role" "exec_role" {
+  name = "${var.project_name}-Exec-Role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {Service = "ecs-tasks.amazonaws.com"}
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "exec_policy" {
+  name = "${var.project_name}-Exec-Role-Policy"
+  role = aws_iam_role.exec_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:::log-group:/ecs/${var.project_name}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action = "ecr:GetAuthorizationToken"
+        Resource = aws_ecs_cluster.main.arn
+      }
     ]
   })
 }

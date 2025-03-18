@@ -24,7 +24,6 @@ export BUCKET=[ENTER YOUR BUCKET NAME HERE]
 export AWS_PAGER=""
 export AWS_REGION=us-east-1
 export IMAGE_NAME=timer
-export IMAGE_TAG=v1
 ```
 
 ### S3 and ECR Image Creation
@@ -47,7 +46,7 @@ terraform init
 Enter the following command, review the actions and then type `yes` to proceed. After 
 pressing `return` you should see `Apply complete!`
 ```shell
-terraform apply
+terraform apply -var="bucket=${BUCKET}"
 ```
 
 ### Invoke the step function
@@ -72,4 +71,3 @@ terraform destroy
  - [Terraform CLI Install](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)    
  - [Terraform Docs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)    
  - [Terraform AWS VPC Blog](https://spacelift.io/blog/terraform-aws-vpc)    
- 
