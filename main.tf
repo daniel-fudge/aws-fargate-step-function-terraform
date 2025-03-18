@@ -14,7 +14,7 @@ locals {
 }
 
 # VPC with IGW and two public Subnets
-# ---------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------
 data "aws_availability_zones" "available" {
   state = "available"
 }
@@ -65,4 +65,47 @@ resource "aws_route_table_association" "subnets" {
   count = length(var.subnet_cidrs)
   route_table_id = aws_route_table.main.id
   subnet_id = element(aws_subnet.subnets[*].id, count.index)
+}
+
+# Fargate-ECS Task
+# ---------------------------------------------------------------------------------------- 
+variable "bucket" {
+  type = string
+  description = "Bucket to store task output"
+}
+
+resource "aws_default_security_group" "main" {
+  vpc_id = aws_vpc.main.id
+  tags = {Name = "${local.project_name}-SG"}
+}
+
+resource "aws_ecs_cluster" "main" {
+  name = "${local.project_name}-Cluster"
+}
+
+resource "aws_iam_role" "task_role" {
+  name = "${local.project_name}-Task-Role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {Service = "ecs-tasks.amazonaws.com"}
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "task_policy" {
+  name = "${local.project_name}-Task-Role-Policy"
+  role = aws_iam_role.task_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "s3:PutObject"
+        Effect   = "Allow"
+        Resource = "arn:aws:s3:::${var.bucket}/*"
+      },
+    ]
+  })
 }
