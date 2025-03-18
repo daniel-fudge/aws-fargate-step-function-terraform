@@ -70,3 +70,6 @@ terraform destroy
  - [CLI Repo Version](https://github.com/daniel-fudge/aws-fargate-step-function-demo)    
  - [CloudFormation Example Repo](https://github.com/nathanpeck/aws-cloudformation-fargate)    
  - [Terraform CLI Install](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)    
+ - [Terraform Docs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)    
+ - [Terraform AWS VPC Blog](https://spacelift.io/blog/terraform-aws-vpc)    
+ 
