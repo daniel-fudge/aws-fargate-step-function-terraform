@@ -11,7 +11,7 @@ deployed the Fargate Step Function with CloudFormation.
 This repo replicates the CloudFormation repo in Terraform to compare the two IaC packages. 
 It also skips the initial task stack and moved the ECR image creation to a sub-folder. 
 
-## 1. Setup the Environment
+## Setup the Environment
 ### Configure the AWS Console
 Before completing the following CLI command, you need to install the AWS CLI and configure 
 it for the account, role and region you wish to use. I use the `aws configure sso` command.
@@ -32,35 +32,46 @@ This is the exact same setup as required in the previous two repos. If you alrea
 the S3 bucket and ECR image created there you can skip to the next section. If you don't, 
 you can follow the make-ecr-image [README](make-ecr-image/README.md). 
 
+## Install Terraform CLI
+Install the Terrafform CLI with [these](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) 
+instructions.
 
-## 4. Add a Step Function to the Stack
-REMINDER: Delete the stack created in the previous step. This section will create a 
-completely new stack and does not require the previous stack.
-
-Create the stack and wait for it to be completed.
+## Create the Terraform Stack
+### Initialize the terraform project. 
+After running the following command you should see `Terraform has been successfully initialized!`
 ```shell
-aws cloudformation create-stack --stack-name step --template-body file://step.yml \
---capabilities CAPABILITY_NAMED_IAM --disable-rollback \
---parameters ParameterKey=Bucket,ParameterValue=${BUCKET}
-aws cloudformation wait stack-create-complete --stack-name step
+terraform init
+```
+
+### Create the Stack 
+Enter the following command, review the actions and then type `yes` to proceed. After 
+pressing `return` you should see `Apply complete!`
+```shell
+terraform apply
 ```
 To delete the stack and wait for it to be deleted:
 ```shell
-aws cloudformation delete-stack --stack-name step
-aws cloudformation wait stack-delete-complete --stack-name step
+
 ```
 
 ### Invoke the step function
+The ouput of the deployed stack includes the command to run the Step Function from the 
+CLI. The command begins with `aws stepfunctions start-execution`. You can get this from 
+the AWS console or you can run the command below.
+
 ```shell
-sed "s/BUCKET/${BUCKET}/" step-input-fargate.json > temp.json
-aws stepfunctions start-execution \
---state-machine-arn arn:aws:states:${AWS_REGION}:${AWS_ACCOUNT_ID}:stateMachine:${IMAGE_NAME}-fargate \
---input "$(cat temp.json)"
-rm -f temp.json
+aws cloudformation list-exports --query "Exports[*].[Value]" --output text | grep start-execution
 ```
 
-## 5. References
+### Delete the Stack
+Enter the following command, review the actions and then type `yes` to proceed. After 
+pressing `return` you should see `Destroy complete!`
+
+```shell
+terraform destroy
+```
+
+## References
  - [CLI Repo Version](https://github.com/daniel-fudge/aws-fargate-step-function-demo)    
  - [CloudFormation Example Repo](https://github.com/nathanpeck/aws-cloudformation-fargate)    
- - [AWS CloudFormation CLI](https://awscli.amazonaws.com/v2/documentation/api/2.1.29/reference/cloudformation/index.html#cli-aws-cloudformation)
- - [AWS CloudFormation Template Reference](https://docs.aws.amazon.com/AWScloudformation/latest/UserGuide/template-reference.html)
+ - [Terraform CLI Install](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)    
