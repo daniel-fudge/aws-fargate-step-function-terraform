@@ -66,7 +66,6 @@ aws cloudformation list-exports --query "Exports[*].[Value]" --output text | gre
 ### Delete the Stack
 Enter the following command, review the actions and then type `yes` to proceed. After 
 pressing `return` you should see `Destroy complete!`
-
 ```shell
 terraform destroy
 ```
