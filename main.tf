@@ -9,6 +9,8 @@ terraform {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 variable "project_name" {
   type = string
   description = "Project name prefix for resources"
@@ -76,6 +78,12 @@ variable "bucket" {
   description = "Bucket to store task output"
 }
 
+variable "region" {
+  type = string
+  description = "The region to deploy the stack into"
+  default = "us-east-1"
+}
+
 resource "aws_default_security_group" "main" {
   vpc_id = aws_vpc.main.id
   tags = {Name = "${var.project_name}-SG"}
@@ -137,7 +145,7 @@ resource "aws_iam_role_policy" "exec_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
-        Resource = "arn:aws:logs:::log-group:/ecs/${var.project_name}:*"
+        Resource = "arn:aws:logs:${data.aws_caller_identity.current.account_id}:${var.region}:log-group:/ecs/${var.project_name}:*"
       },
       {
         Effect   = "Allow"
@@ -146,4 +154,42 @@ resource "aws_iam_role_policy" "exec_policy" {
       }
     ]
   })
+}
+
+resource "aws_ecs_task_definition" "main" {
+  family = var.project_name
+  task_role_arn = aws_iam_role.task_role.arn
+  execution_role_arn = aws_iam_role.exec_role.arn
+  network_mode = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu = 256
+  memory = 512
+  runtime_platform {
+    operating_system_family = "LINUX"
+    cpu_architecture = "X86_64"
+  }
+  container_definitions = <<TASK_DEFINITION
+[
+  {
+    "name": "${var.project_name}",
+    "image": "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.region}.amazonaws.com/${var.project_name}:latest",
+    "cpu": 0,
+    "portMappings": [{"containerPort": 80, "hostPort": 80, "Protocol": "tcp"}],
+    "essential": true,
+    "entryPoint": ["python3.13"],
+    "LogConfiguration": { 
+      "LogDriver": "awslogs",
+      "Options": { 
+        "awslogs-region": "${var.region}",
+        "awslogs-group": "/ecs/${var.project_name}",
+        "mode": "non-blocking",
+        "awslogs-create-group": "true",
+        "max-buffer-size": "25m",
+        "awslogs-stream-prefix": "ecs"    
+      }
+    }
+  }
+]
+TASK_DEFINITION
+
 }
