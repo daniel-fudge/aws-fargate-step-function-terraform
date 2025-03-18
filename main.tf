@@ -4,7 +4,7 @@ terraform {
   required_providers {
     aws = {
       source  = "hashicorp/aws"
-      version = "~> 5.29"
+      version = "~> 5.91"
     }
   }
 }
@@ -191,5 +191,98 @@ resource "aws_ecs_task_definition" "main" {
   }
 ]
 TASK_DEFINITION
+}
 
+# Step Function
+# ---------------------------------------------------------------------------------------- 
+resource "aws_iam_role" "step_role" {
+  name = "${var.project_name}-Step-Role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = "sts:AssumeRole"
+      Principal = {Service = "states.${var.region}.amazonaws.com"}
+    }]
+  })
+}
+
+data "aws_iam_policy_document" "step_policy_doc" {
+  statement {
+    actions = ["iam:PassRole"]
+    resources = ["*"]
+    condition {
+      test = "StringLike"
+      variable = "iam:PassedToService"
+      values = ["ecs-tasks.amazonaws.com"]
+    }
+  }
+  statement {
+    actions = ["ecs:RunTask"]
+    resources = [aws_ecs_task_definition.main.arn]
+  }
+  statement {
+    actions = ["ecs:StopTask", "ecs:DescribeTasks"]
+    resources = ["arn:aws:ecs:${var.region}:${data.aws_caller_identity.current.account_id}:task/${var.project_name}/*"]
+  }
+  statement {
+    actions = ["events:PutTargets", "events:PutRule", "events:DescribeRule"]
+    resources = ["arn:aws:events:${var.region}:${data.aws_caller_identity.current.account_id}:rule/StepFunctionsGetEventsForECSTaskRule"]
+  }
+}
+
+resource "aws_iam_role_policy" "step_policy" {
+  name = "${var.project_name}-Step-Role-Policy"
+  role = aws_iam_role.step_role.id
+  policy = data.aws_iam_policy_document.step_policy_doc.json
+}
+
+resource "aws_sfn_state_machine" "main" {
+  name = "${var.project_name}-Step-Function"
+  role_arn = aws_iam_role.step_role.arn
+
+  definition = <<EOF
+{
+  "QueryLanguage": "JSONPath",
+  "Comment": "A delayed batch of Fargate timers",
+  "StartAt": "Timer-Batch",
+  "States": {
+    "Timer-Batch": {
+      "Type": "Map",
+      "End": true,
+      "ItemsPath": "$.timer_info",
+      "ItemProcessor": {
+        "ProcessorConfig": {"Mode": "INLINE"},
+        "StartAt": "Wait",
+        "States": {
+          "Wait": {
+            "Type": "Wait",
+            "SecondsPath": "$.delay",
+            "Next": "Timer-Fargate"},
+          "Timer-Fargate": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::ecs:runTask.sync",
+            "End": true,
+            "Parameters": {
+              "LaunchType": "FARGATE",
+              "Cluster": "${aws_ecs_cluster.main.arn}",
+              "TaskDefinition": "arn:aws:ecs:${var.region}:${data.aws_caller_identity.current.account_id}:task-definition/${var.project_name}",
+              "NetworkConfiguration": {
+                "AwsvpcConfiguration": {
+                  "Subnets": ["${aws_subnet.subnets[0].id}", "${aws_subnet.subnets[1].id}"],
+                  "SecurityGroups": ["${aws_default_security_group.main.id}"],
+                  "AssignPublicIp": "ENABLED"}},
+              "Overrides": {
+                "ContainerOverrides": [{
+                  "Name": "${var.project_name}",
+                  "Command.$": "$.commands"}]
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+EOF
 }
