@@ -84,9 +84,17 @@ variable "region" {
   default = "us-east-1"
 }
 
-resource "aws_default_security_group" "main" {
+resource "aws_security_group" "main" {
   vpc_id = aws_vpc.main.id
   tags = {Name = "${var.project_name}-SG"}
+}
+
+resource "aws_vpc_security_group_egress_rule" "main" {
+  security_group_id = aws_security_group.main.id
+  cidr_ipv4   = "0.0.0.0/0"
+  from_port   = -1
+  ip_protocol = -1
+  to_port     = -1
 }
 
 resource "aws_ecs_cluster" "main" {
@@ -156,8 +164,13 @@ resource "aws_iam_role_policy" "exec_policy" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "AWS_task_exec_policy_attach" {
+  role       = "${aws_iam_role.exec_role.name}"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
 resource "aws_ecs_task_definition" "main" {
-  family = var.project_name
+  family = "${var.project_name}-Task-Definition"
   task_role_arn = aws_iam_role.task_role.arn
   execution_role_arn = aws_iam_role.exec_role.arn
   network_mode = "awsvpc"
@@ -219,7 +232,7 @@ data "aws_iam_policy_document" "step_policy_doc" {
   }
   statement {
     actions = ["ecs:RunTask"]
-    resources = [aws_ecs_task_definition.main.arn]
+    resources = ["${aws_ecs_task_definition.main.arn_without_revision}:*"]
   }
   statement {
     actions = ["ecs:StopTask", "ecs:DescribeTasks"]
@@ -266,11 +279,11 @@ resource "aws_sfn_state_machine" "main" {
             "Parameters": {
               "LaunchType": "FARGATE",
               "Cluster": "${aws_ecs_cluster.main.arn}",
-              "TaskDefinition": "arn:aws:ecs:${var.region}:${data.aws_caller_identity.current.account_id}:task-definition/${var.project_name}",
+              "TaskDefinition": "${aws_ecs_task_definition.main.arn_without_revision}",
               "NetworkConfiguration": {
                 "AwsvpcConfiguration": {
                   "Subnets": ["${aws_subnet.subnets[0].id}", "${aws_subnet.subnets[1].id}"],
-                  "SecurityGroups": ["${aws_default_security_group.main.id}"],
+                  "SecurityGroups": ["${aws_security_group.main.id}"],
                   "AssignPublicIp": "ENABLED"}},
               "Overrides": {
                 "ContainerOverrides": [{
@@ -285,4 +298,19 @@ resource "aws_sfn_state_machine" "main" {
   }
 }
 EOF
+}
+
+# Ouput
+# ---------------------------------------------------------------------------------------- 
+output "step_cmd" {
+  value = join("", [
+    "aws stepfunctions start-execution --state-machine-arn ${aws_sfn_state_machine.main.arn} --input '{\"timer_info\": [",
+    "{\"delay\": 0, \"commands\": [\"app.py\", \"--job_id\", \"1\", \"--duration\", \"3\", \"--bucket\", \"${var.bucket}\"]}, ",
+    "{\"delay\": 2, \"commands\": [\"app.py\", \"--job_id\", \"2\", \"--duration\", \"4\", \"--bucket\", \"${var.bucket}\"]}]}\"'"])
+}
+output "task_cmd" {
+  value = join("", [
+    "aws stepfunctions start-execution --state-machine-arn ${aws_sfn_state_machine.main.arn} --input '{\"timer_info\": [",
+    "{\"delay\": 0, \"commands\": [\"app.py\", \"--job_id\", \"1\", \"--duration\", \"3\", \"--bucket\", \"${var.bucket}\"]}, ",
+    "{\"delay\": 2, \"commands\": [\"app.py\", \"--job_id\", \"2\", \"--duration\", \"4\", \"--bucket\", \"${var.bucket}\"]}]}\"'"])
 }

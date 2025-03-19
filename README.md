@@ -51,18 +51,18 @@ terraform apply -var="bucket=${BUCKET}"
 
 ### Invoke the step function
 The ouput of the deployed stack includes the command to run the Step Function from the 
-CLI. The command begins with `aws stepfunctions start-execution`. You can get this from 
-the AWS console or you can run the command below.
+CLI. The command begins with `aws stepfunctions start-execution`. Unfortunately the " do 
+not escape properly in the stardard output. To see the raw command enter the command below. 
 
 ```shell
-
+terraform output -raw step_cmd
 ```
 
 ### Delete the Stack
 Enter the following command, review the actions and then type `yes` to proceed. After 
 pressing `return` you should see `Destroy complete!`
 ```shell
-terraform destroy
+terraform destroy -var="bucket=${BUCKET}"
 ```
 
 ## References
